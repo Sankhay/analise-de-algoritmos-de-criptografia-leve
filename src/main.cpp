@@ -3,21 +3,8 @@
 #include "setup/setup.h"
 #include "structs/structs.h"
 #include <SD.h>
+#include "sd/sd.h"
 #include "config.h"
-
- char* bytesToHex(const void* src, size_t len) {
-    char* dest = (char*)malloc(len * 2 + 1);
-    if (dest == NULL) return NULL; 
-
-    const uint8_t* byteSrc = (const uint8_t*)src;
-    
-    for (size_t i = 0; i < len; i++) {
-        sprintf(&dest[i * 2], "%02X", byteSrc[i]);
-    }
-    dest[len * 2] = '\0';
-
-    return dest;
-}
 
 struct Algorithm speck = {"SPECK",  2 * sizeof(uint64_t),  2 * sizeof(uint64_t),  2 * sizeof(uint64_t)};
 struct Algorithm chacha20 = {"CHACHA20", CHACHA20_DATA_SIZE * sizeof(uint8_t), 32 * sizeof(uint8_t),  CHACHA20_DATA_SIZE * sizeof(uint8_t)};
@@ -26,10 +13,10 @@ struct Algorithm elephant = {"Elephant", 16 * sizeof(unsigned char), 8 * sizeof(
 struct Algorithm tinyJambu = {"TINYJAMBU", 32 * sizeof(uint8_t), 16 * sizeof(uint16_t), 40 * sizeof(unsigned char)};
 
 AlgorithmBenchmark benchmarks[] = {
-    //{speck,      speck_wrapper,      setup_speck,      teardown_speck},
-    //{chacha20,   chacha20_wrapper,   setup_chacha20,   teardown_chacha20},
-    //{gift64,     gift64_wrapper,     setup_gift64,     teardown_gift64},
-    //{elephant,   elephant_wrapper,   setup_elephant,   teardown_elephant},
+    {speck,      speck_wrapper,      setup_speck,      teardown_speck},
+    {chacha20,   chacha20_wrapper,   setup_chacha20,   teardown_chacha20},
+    {gift64,     gift64_wrapper,     setup_gift64,     teardown_gift64},
+    {elephant,   elephant_wrapper,   setup_elephant,   teardown_elephant},
     {tinyJambu,  tiny_jambu_wrapper, setup_tinyjambu,  teardown_tinyjambu}
 };
 
@@ -47,101 +34,6 @@ PerformanceMetrics measurePerformance(MeasurableFunction functionToMeasure, void
   metrics.algorithmReturn = algorithmReturnOrigin; 
 
   return metrics;
-}
-
-void displayAndSaveMetric(File& dataFile, const PerformanceMetrics& metric) {
-    unsigned long totalExecutionTime = metric.endTime - metric.startTime;
-    unsigned long encryptionTime = metric.algorithmReturn.encryptionTime - metric.startTime;
-    unsigned long decryptionTime = metric.endTime - metric.algorithmReturn.encryptionTime;
-    const char* successString = metric.algorithmReturn.success ? "True" : "False";
-
-    char* hexData = NULL;
-    if (metric.algorithmReturn.encryptedData != NULL && metric.algorithm.encryptedDataSize > 0) {
-        hexData = bytesToHex(metric.algorithmReturn.encryptedData, metric.algorithm.encryptedDataSize);
-    } else {
-        hexData = strdup("N/A");
-    }
-
-    char* plaintextHex = NULL;
-    if (metric.plaintext != NULL && metric.algorithm.plainTextSize > 0) {
-        plaintextHex = bytesToHex(metric.plaintext, metric.algorithm.plainTextSize);
-    } else {
-        plaintextHex = strdup("N/A");
-    }
-
-    char* keyHex = NULL;
-    if (metric.key != NULL && metric.algorithm.keySize > 0) {
-        keyHex = bytesToHex(metric.key, metric.algorithm.keySize);
-    } else {
-        keyHex = strdup("N/A");
-    }
- 
-    char serialBuffer[512]; 
-    char csvBuffer[512]; 
-
-    sprintf(serialBuffer, "%-15s| %-12lu | %-12lu | %-12lu | %-7s | %-15s | %-15s | %s",
-            metric.algorithm.algorithName,
-            encryptionTime,
-            decryptionTime,
-            totalExecutionTime,
-            successString,
-            plaintextHex,      // NEW: Plaintext Hex
-            keyHex,            // NEW: Key Hex
-            hexData);          // Encrypted Data Hex
-
-    // Saída CSV: Adicionando colunas (Note: Removed hexDataSize which was unused in final display)
-    sprintf(csvBuffer, "%s,%lu,%lu,%lu,%s,%s,%s,%s",
-            metric.algorithm.algorithName,
-            encryptionTime,
-            decryptionTime,
-            totalExecutionTime,
-            successString,
-            plaintextHex,
-            keyHex,
-            hexData);
-
-    Serial.println(serialBuffer);
-    
-    if (dataFile) {
-        dataFile.println(csvBuffer);
-    }
-
-    if (hexData != NULL) {
-        free(hexData);
-    }
-    if (plaintextHex != NULL) {
-        free(plaintextHex);
-    }
-    if (keyHex != NULL) {
-        free(keyHex);
-    }
-
-    if (metric.algorithmReturn.encryptedData != NULL) {
-        free(metric.algorithmReturn.encryptedData);
-    }
-
-}
-
-void readAndDisplayFile(const char* filename) {
-    Serial.print("\n--- Conteúdo Completo do Arquivo SD (");
-    Serial.print(filename);
-    Serial.println(") ---");
-    
-    File dataFile = SD.open(filename);
-
-    if (dataFile) {
-        while (dataFile.available()) {
-            Serial.write(dataFile.read());
-        }
-        
-        dataFile.close();
-        
-        Serial.println("\n--- Fim da Leitura do Arquivo ---");
-    } else {
-        Serial.print("Erro ao abrir ");
-        Serial.print(filename);
-        Serial.println(" para leitura!");
-    }
 }
 
 void setup() {
@@ -216,7 +108,7 @@ void setup() {
     if (dataFile) {
         dataFile.println("---------------------------------------------------------------------------------------");
         dataFile.close();
-        Serial.println("Resultados salvos no cartão SD: results.txt");
+        Serial.println("Resultados salvos no cartão SD");
     }
     
     readAndDisplayFile(RESULTS_FILENAME);
